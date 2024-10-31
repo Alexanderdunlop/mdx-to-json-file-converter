@@ -43,7 +43,12 @@
         const fileInput = document.getElementById('fileInput');
         const result = document.getElementById('result');
 
-        // Enhanced metadata extraction with validation
+        /**
+         * Validates and normalizes metadata from MDX frontmatter
+         * @param {Object} metadata - Raw metadata object from frontmatter
+         * @throws {Error} If required fields are missing
+         * @returns {Object} Normalized metadata object
+         */
         function validateMetadata(metadata) {
             const requiredFields = ['title', 'date', 'author', 'tags', 'category'];
             const missingFields = requiredFields.filter(field => !metadata[field]);
@@ -54,15 +59,18 @@
 
             return {
                 ...metadata,
-                date: new Date(metadata.date).toISOString(), // Normalize date format
+                date: new Date(metadata.date).toISOString(),
                 tags: Array.isArray(metadata.tags) ? metadata.tags : [metadata.tags].filter(Boolean),
                 author: typeof metadata.author === 'object' ? metadata.author.name : metadata.author
             };
         }
 
-        // Enhanced content processing
+        /**
+         * Processes MDX content to extract structured information
+         * @param {string} content - Raw MDX content
+         * @returns {Object} Processed content with extracted information
+         */
         function processContent(content) {
-            // Remove HTML comments
             let processedContent = content;
             
             // Extract links and references
@@ -76,16 +84,22 @@
             return {
                 rawContent: processedContent.trim(),
                 plainText: processedContent
-                    .replace(/[#*`_\[\]()]/g, '') // Remove Markdown syntax
-                    .replace(/\n+/g, ' ')         // Replace newlines with spaces
+                    .replace(/[#*`_\[\]()]/g, '')
+                    .replace(/\n+/g, ' ')
                     .trim(),
                 links,
                 headers,
                 wordCount: processedContent.trim().split(/\s+/).length,
-                readingTime: Math.ceil(processedContent.trim().split(/\s+/).length / 200) // Assuming 200 words per minute
+                readingTime: Math.ceil(processedContent.trim().split(/\s+/).length / 200)
             };
         }
 
+        /**
+         * Parses MDX content to extract frontmatter and content
+         * @param {string} content - Raw MDX file content
+         * @throws {Error} If MDX format is invalid or processing fails
+         * @returns {Object} Structured JSON object ready for Pinecone embedding
+         */
         function parseFrontMatter(content) {
             const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
             const match = content.match(frontMatterRegex);
@@ -100,9 +114,8 @@
                 const validatedMetadata = validateMetadata(metadata);
                 const processedContent = processContent(mainContent);
 
-                // Optimized JSON structure for Pinecone embedding
                 return {
-                    id: crypto.randomUUID(), // Unique identifier
+                    id: crypto.randomUUID(),
                     metadata: {
                         ...validatedMetadata,
                         timestamp: new Date().toISOString(),
@@ -115,7 +128,7 @@
                         ...processedContent,
                         chunks: processedContent.plainText
                             .match(/[^.!?]+[.!?]+/g)
-                            ?.map(chunk => chunk.trim()) || [] // Split into sentences for better embedding
+                            ?.map(chunk => chunk.trim()) || []
                     },
                     embeddings: {
                         title: validatedMetadata.title,
@@ -129,31 +142,11 @@
             }
         }
 
-        // Handle drag and drop events
-        dropZone.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            dropZone.classList.add('dragover');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-            dropZone.classList.remove('dragover');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            handleFile(e.dataTransfer.files[0]);
-        });
-
-        // Handle click to upload
-        dropZone.addEventListener('click', () => {
-            fileInput.click();
-        });
-
-        fileInput.addEventListener('change', (e) => {
-            handleFile(e.target.files[0]);
-        });
-
+        /**
+         * Handles file processing for MDX to JSON conversion
+         * @param {File} file - The uploaded MDX file
+         * @returns {void}
+         */
         function handleFile(file) {
             if (!file) return;
             if (!file.name.endsWith('.mdx')) {
@@ -185,6 +178,30 @@
             };
             reader.readAsText(file);
         }
+
+        // Event Listeners
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
     </script>
 </body>
 </html>
