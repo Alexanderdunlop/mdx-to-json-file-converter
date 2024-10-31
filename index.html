@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>MDX to JSON Converter</title>
+    <style>
+        body {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        #dropZone {
+            border: 2px dashed #ccc;
+            border-radius: 4px;
+            padding: 20px;
+            text-align: center;
+            margin: 20px 0;
+        }
+        #dropZone.dragover {
+            background: #e1f5fe;
+            border-color: #29b6f6;
+        }
+        #result {
+            white-space: pre-wrap;
+            background: #f5f5f5;
+            padding: 15px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>MDX to JSON Converter</h1>
+    <div id="dropZone">
+        Drop your MDX file here or click to upload
+        <input type="file" id="fileInput" accept=".mdx" style="display: none">
+    </div>
+    <div id="result"></div>
+
+    <script type="module">
+        import { load } from 'https://esm.sh/js-yaml';
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const result = document.getElementById('result');
+
+        function parseFrontMatter(content) {
+            const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
+            const match = content.match(frontMatterRegex);
+            
+            if (!match) {
+                return {
+                    metadata: {},
+                    content: content
+                };
+            }
+
+            try {
+                const metadata = load(match[1]);
+                const mainContent = match[2];
+                return {
+                    metadata: metadata || {},
+                    content: mainContent
+                };
+            } catch (e) {
+                console.error('Error parsing frontmatter:', e);
+                return {
+                    metadata: {},
+                    content: content
+                };
+            }
+        }
+
+        // Handle drag and drop events
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFile(e.dataTransfer.files[0]);
+        });
+
+        // Handle click to upload
+        dropZone.addEventListener('click', () => {
+            fileInput.click();
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFile(e.target.files[0]);
+        });
+
+        function handleFile(file) {
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async (e) => {
+                try {
+                    const content = e.target.result;
+                    const parsed = parseFrontMatter(content);
+                    
+                    // Display the result
+                    result.textContent = JSON.stringify(parsed, null, 2);
+
+                    // Create download link
+                    const blob = new Blob([JSON.stringify(parsed, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = file.name.replace('.mdx', '.json');
+                    a.click();
+                    URL.revokeObjectURL(url);
+                } catch (error) {
+                    result.textContent = `Error converting file: ${error.message}`;
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
