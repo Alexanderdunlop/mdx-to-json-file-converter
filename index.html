@@ -43,30 +43,89 @@
         const fileInput = document.getElementById('fileInput');
         const result = document.getElementById('result');
 
+        // Enhanced metadata extraction with validation
+        function validateMetadata(metadata) {
+            const requiredFields = ['title', 'date', 'author', 'tags', 'category'];
+            const missingFields = requiredFields.filter(field => !metadata[field]);
+            
+            if (missingFields.length > 0) {
+                throw new Error(`Missing required metadata fields: ${missingFields.join(', ')}`);
+            }
+
+            return {
+                ...metadata,
+                date: new Date(metadata.date).toISOString(), // Normalize date format
+                tags: Array.isArray(metadata.tags) ? metadata.tags : [metadata.tags].filter(Boolean),
+                author: typeof metadata.author === 'object' ? metadata.author.name : metadata.author
+            };
+        }
+
+        // Enhanced content processing
+        function processContent(content) {
+            // Remove HTML comments
+            let processedContent = content;
+            
+            // Extract links and references
+            const links = Array.from(processedContent.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g))
+                .map(match => ({ text: match[1], url: match[2] }));
+
+            // Extract headers
+            const headers = Array.from(processedContent.matchAll(/#{1,6}\s+(.+)/g))
+                .map(match => match[1].trim());
+
+            return {
+                rawContent: processedContent.trim(),
+                plainText: processedContent
+                    .replace(/[#*`_\[\]()]/g, '') // Remove Markdown syntax
+                    .replace(/\n+/g, ' ')         // Replace newlines with spaces
+                    .trim(),
+                links,
+                headers,
+                wordCount: processedContent.trim().split(/\s+/).length,
+                readingTime: Math.ceil(processedContent.trim().split(/\s+/).length / 200) // Assuming 200 words per minute
+            };
+        }
+
         function parseFrontMatter(content) {
             const frontMatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
             const match = content.match(frontMatterRegex);
             
             if (!match) {
-                return {
-                    metadata: {},
-                    content: content
-                };
+                throw new Error('Invalid MDX format: Missing front matter');
             }
 
             try {
                 const metadata = load(match[1]);
                 const mainContent = match[2];
+                const validatedMetadata = validateMetadata(metadata);
+                const processedContent = processContent(mainContent);
+
+                // Optimized JSON structure for Pinecone embedding
                 return {
-                    metadata: metadata || {},
-                    content: mainContent
+                    id: crypto.randomUUID(), // Unique identifier
+                    metadata: {
+                        ...validatedMetadata,
+                        timestamp: new Date().toISOString(),
+                        source: 'mdx_conversion',
+                        contentType: 'blog_post',
+                        wordCount: processedContent.wordCount,
+                        readingTime: processedContent.readingTime
+                    },
+                    content: {
+                        ...processedContent,
+                        chunks: processedContent.plainText
+                            .match(/[^.!?]+[.!?]+/g)
+                            ?.map(chunk => chunk.trim()) || [] // Split into sentences for better embedding
+                    },
+                    embeddings: {
+                        title: validatedMetadata.title,
+                        summary: validatedMetadata.excerpt || processedContent.plainText.slice(0, 200),
+                        tags: validatedMetadata.tags,
+                        category: validatedMetadata.category
+                    }
                 };
             } catch (e) {
-                console.error('Error parsing frontmatter:', e);
-                return {
-                    metadata: {},
-                    content: content
-                };
+                throw new Error(`Error processing MDX: ${e.message}`);
             }
         }
 
@@ -97,6 +156,10 @@
 
         function handleFile(file) {
             if (!file) return;
+            if (!file.name.endsWith('.mdx')) {
+                result.textContent = 'Error: Please upload an MDX file';
+                return;
+            }
 
             const reader = new FileReader();
             reader.onload = async (e) => {
@@ -112,11 +175,12 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = file.name.replace('.mdx', '.json');
+                    a.download = `${parsed.metadata.title.toLowerCase().replace(/\s+/g, '_')}.json`;
                     a.click();
                     URL.revokeObjectURL(url);
                 } catch (error) {
-                    result.textContent = `Error converting file: ${error.message}`;
+                    result.textContent = `Error: ${error.message}`;
+                    console.error('Conversion error:', error);
                 }
             };
             reader.readAsText(file);
