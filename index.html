@@ -74,8 +74,33 @@
             let processedContent = content;
             
             // Extract links and references
-            const links = Array.from(processedContent.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g))
-                .map(match => ({ text: match[1], url: match[2] }));
+            // Extract all types of links
+            const links = [
+                // Markdown links [text](url)
+                ...Array.from(processedContent.matchAll(/\[([^\]]+)\]\(([^)]+)\)/g))
+                    .map(match => ({
+                        type: 'markdown',
+                        text: match[1],
+                        url: match[2]
+                    })),
+                
+                // HTML links <a href="url">text</a>
+                ...Array.from(processedContent.matchAll(/<a\s+(?:[^>]*?\s+)?href="([^"]*)"[^>]*>(.*?)<\/a>/g))
+                    .map(match => ({
+                        type: 'html',
+                        text: match[2].replace(/<[^>]*>/g, '').trim(),
+                        url: match[1]
+                    })),
+                    
+                // Raw URLs http(s)://...
+                ...Array.from(processedContent.matchAll(/(?<![\(\[])(https?:\/\/[^\s\)]+)/g))
+                    .map(match => ({
+                        type: 'url',
+                        text: match[1],
+                        url: match[1]
+                    }))
+            ].filter(link => link.url && link.url.trim()); // Filter out any empty links
+
 
             // Extract headers
             const headers = Array.from(processedContent.matchAll(/#{1,6}\s+(.+)/g))
