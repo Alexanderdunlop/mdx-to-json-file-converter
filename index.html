@@ -168,7 +168,7 @@
                     const url = URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `${parsed.metadata.title.toLowerCase().replace(/\s+/g, '_')}.json`;
+                    a.download = file.name.replace('.mdx', '.json');
                     a.click();
                     URL.revokeObjectURL(url);
                 } catch (error) {
