@@ -26,14 +26,43 @@
             padding: 15px;
             border-radius: 4px;
         }
+        .file-list {
+            margin: 20px 0;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 4px;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .progress {
+            width: 0%;
+            height: 100%;
+            background-color: #4CAF50;
+            transition: width 0.3s ease;
+        }
+        .status {
+            margin: 10px 0;
+            color: #666;
+        }
     </style>
 </head>
 <body>
-    <h1>MDX to JSON Converter</h1>
+    <h1>MDX to JSON Converter - Batch Processing</h1>
     <div id="dropZone">
-        Drop your MDX file here or click to upload
-        <input type="file" id="fileInput" accept=".mdx" style="display: none">
+        Drop your MDX files here or click to upload
+        <input type="file" id="fileInput" accept=".mdx" multiple style="display: none">
     </div>
+    <div class="file-list" id="fileList"></div>
+    <div class="progress-bar">
+        <div class="progress" id="progressBar"></div>
+    </div>
+    <div class="status" id="status"></div>
     <div id="result"></div>
 
     <script type="module">
@@ -128,7 +157,7 @@
 
         /**
          * Parses MDX content to extract frontmatter and content
-         * @param {string} content - Raw MDX file content
+         * @param {string} content - Raw MDX file content   
          * @throws {Error} If MDX format is invalid or processing fails
          * @returns {Object} Structured JSON object ready for Pinecone embedding
          */
@@ -235,6 +264,99 @@
         fileInput.addEventListener('change', (e) => {
             handleFile(e.target.files[0]);
         });
+        
+        /**
+         * Process multiple files in batch
+         * @param {FileList} files - List of files to process
+         * @returns {Promise<void>}
+         */
+         async function processBatch(files) {
+            const fileList = document.getElementById('fileList');
+            const progressBar = document.getElementById('progressBar');
+            const status = document.getElementById('status');
+            const result = document.getElementById('result');
+
+            fileList.innerHTML = Array.from(files)
+                .map(file => `<div>${file.name}</div>`)
+                .join('');
+
+            const results = [];
+            let processed = 0;
+
+            for (const file of files) {
+                try {
+                    const content = await readFileAsync(file);
+                    const parsed = parseFrontMatter(content);
+                    results.push({
+                        filename: file.name,
+                        data: parsed,
+                        status: 'success'
+                    });
+                } catch (error) {
+                    results.push({
+                        filename: file.name,
+                        error: error.message,
+                        status: 'error'
+                    });
+                }
+
+                processed++;
+                const progress = (processed / files.length) * 100;
+                progressBar.style.width = `${progress}%`;
+                status.textContent = `Processing: ${processed}/${files.length} files`;
+            }
+
+            // Create zip file containing all JSON files
+            const zip = new JSZip();
+            results.forEach(result => {
+                if (result.status === 'success') {
+                    const jsonContent = JSON.stringify(result.data, null, 2);
+                    const fileName = result.filename.replace('.mdx', '.json');
+                    zip.file(fileName, jsonContent);
+                }
+            });
+
+            // Generate and download zip file
+            const zipBlob = await zip.generateAsync({type: 'blob'});
+            const downloadUrl = URL.createObjectURL(zipBlob);
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = 'converted_files.zip';
+            a.click();
+            URL.revokeObjectURL(downloadUrl);
+
+            // Display summary
+            result.textContent = JSON.stringify(results, null, 2);
+            status.textContent = `Completed: ${results.filter(r => r.status === 'success').length} successful, ${results.filter(r => r.status === 'error').length} failed`;
+        }
+
+        /**
+         * Promise wrapper for FileReader
+         * @param {File} file - File to read
+         * @returns {Promise<string>} File contents
+         */
+        function readFileAsync(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = e => reject(e);
+                reader.readAsText(file);
+            });
+        }
+
+        // Update event listeners for multiple file handling
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            processBatch(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            processBatch(e.target.files);
+        });
     </script>
+
+    <!-- Add JSZip library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </body>
 </html>
