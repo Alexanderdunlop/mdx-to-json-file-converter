@@ -70,7 +70,7 @@
          * @param {string} content - Raw MDX content
          * @returns {Object} Processed content with extracted information
          */
-        function processContent(content) {
+         function processContent(content) {
             let processedContent = content;
             
             // Extract links and references
@@ -81,16 +81,23 @@
             const headers = Array.from(processedContent.matchAll(/#{1,6}\s+(.+)/g))
                 .map(match => match[1].trim());
 
+            // Create plain text version with removed HTML tags and image references
+            let plainText = processedContent
+                .replace(/\!\[.*?\]\(.*?\)/g, '') // Remove image markdown
+                .replace(/<[^>]*>/g, '') // Remove HTML tags
+                .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '$1') // Replace markdown links with just the text
+                .replace(/[#*`_]/g, '') // Remove markdown formatting
+                .replace(/\n+/g, ' ') // Replace multiple newlines with single space
+                .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+                .trim();
+
             return {
                 rawContent: processedContent.trim(),
-                plainText: processedContent
-                    .replace(/[#*`_\[\]()]/g, '')
-                    .replace(/\n+/g, ' ')
-                    .trim(),
+                plainText,
                 links,
                 headers,
-                wordCount: processedContent.trim().split(/\s+/).length,
-                readingTime: Math.ceil(processedContent.trim().split(/\s+/).length / 200)
+                wordCount: plainText.split(/\s+/).length,
+                readingTime: Math.ceil(plainText.split(/\s+/).length / 200)
             };
         }
 
